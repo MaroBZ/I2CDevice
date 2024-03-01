@@ -42,6 +42,7 @@ namespace EE513 {
 			perror("I2C: Failed to connect to the device\n");
 				return 1;
 		}
+		cout << "Device connected successfully" << endl;
 		return 0;
 	}
 /**
@@ -135,6 +136,7 @@ block of registers
 	void I2CDevice::close(){
 		::close(this->file);
 		this->file = -1;
+		cout << "Communication closed" <<endl;
 	}
 /**
 * Closes the file on destruction, provided that it has not already been closed.
