@@ -9,6 +9,8 @@
 #include <sstream>
 #include "I2CDevice.h"
 #include <ctime>
+#include <chrono>
+#include <thread>
 using namespace std;
 using namespace EE513;
 
@@ -44,6 +46,11 @@ class RTC : public I2CDevice {
 		RTC(unsigned int bus, unsigned int device) : I2CDevice(bus, device) {
 
 		}
+
+	// converting to Binary Coded Decimal (BCD)
+	int convertToBCD(int value) {
+		return ((value / 10 * 16) + (value % 10));
+	}
 
 	void displayTimeDate() {
 
@@ -138,22 +145,14 @@ class RTC : public I2CDevice {
 		
 		cout << "--------------------------------------------------------" << endl;
 
-		// converting to Binary Coded Decimal (BCD)
-		min = (min / 10 * 16) + (min % 10); 
-		sec = (sec / 10 * 16) + (sec % 10);
-		hour = (hour / 10 * 16) + (hour % 10);
-		date = (date / 10 * 16) + (date % 10);
-		month = (month / 10 * 16) + (month % 10);
-		year = (year / 10 * 16) + (year % 10);
-
 		//Time
-		writeRegister(secAddress, sec);
-		writeRegister(minAddress, min);
-		writeRegister(hourAddress, hour);
+		writeRegister(secAddress, convertToBCD(sec));
+		writeRegister(minAddress, convertToBCD(min));
+		writeRegister(hourAddress, convertToBCD(hour));
 		//Date
-		writeRegister(dateAddress, date);
-		writeRegister(monthAddress, month);
-		writeRegister(yearAddress, year);
+		writeRegister(dateAddress, convertToBCD(date));
+		writeRegister(monthAddress, convertToBCD(month));
+		writeRegister(yearAddress, convertToBCD(year));
 
 
 	}
@@ -168,33 +167,24 @@ class RTC : public I2CDevice {
 		unsigned int min = timeinfo->tm_min;
 		unsigned int h = timeinfo->tm_hour;
 
-		// converting to Binary Coded Decimal (BCD)
-		min = (min / 10 * 16) + (min % 10);
-		s = (s / 10 * 16) + (s % 10);
-		h = (h / 10 * 16) + (h % 10);
-
 		unsigned int dayName = timeinfo->tm_wday; // day name
 		unsigned int d = (timeinfo->tm_mday); // date
 		unsigned int month = (timeinfo->tm_mon + 1); // starts from 0 (0-11)
 		unsigned int y = (timeinfo->tm_year - 100); //starts from 1900 so 2024 - 1900 = 124 => we remove 100
 
-		//no need to convert the dayName as the values between 1 and 7 are already in BCD
-		d = (d / 10 * 16) + (d % 10);
-		month = (month / 10 * 16) + (month % 10);
-		y = (y / 10 * 16) + (y % 10);
 		
 		//y = std::stoi(std::to_string(y), nullptr, 16) // another way i found that works
 		// the variable is considered as a hex number and converted to decimal as the write function converts automatically the decimal value to hex
 
 		//Time
-		writeRegister(secAddress, s);
-		writeRegister(minAddress, min);
-		writeRegister(hourAddress, h);
+		writeRegister(secAddress, convertToBCD(s));
+		writeRegister(minAddress, convertToBCD(min));
+		writeRegister(hourAddress, convertToBCD(h));
 		//Date
-		writeRegister(dayNameAddress, dayName);
-		writeRegister(dateAddress, d);
-		writeRegister(monthAddress, month);
-		writeRegister(yearAddress, y);
+		writeRegister(dayNameAddress, dayName); //no need to convert the dayName as the values between 1 and 7 are already in BCD
+		writeRegister(dateAddress, convertToBCD(d));
+		writeRegister(monthAddress, convertToBCD(month));
+		writeRegister(yearAddress, convertToBCD(y));
 
 
 		cout << "DATE SET TO: ";
@@ -239,72 +229,66 @@ class RTC : public I2CDevice {
 	}
 
 
-	/*void setAlarm1(bool day_or_date, unsigned int sec, unsigned int min, unsigned int hour, unsigned int day_date, unsigned char mask) {
-
-	if (mask == 0000)
-		if (day_or_date) { // =1 => day of the week 
-
-			cout << "ALARM 1 SET ON: " 
-			<< std::dec
-			<< std::setw(2) << std::setfill('0') << hour << ":"
-			<< std::setw(2) << std::setfill('0') << min << ":"
-			<< std::setw(2) << std::setfill('0') << sec << " on the " 
-			<< std::setw(2) << std::setfill('0') << day_date << endl;
-
-
-			writeRegister(alarm1SecAddress, sec); // A1M1
-			writeRegister(alarm1MinAddress, min); // A1M2
-			writeRegister(alarm1HourAddress, hour);   // A1M3
-			writeRegister(alarm1DateAddress, (0b00000000 | day_date)); // A1M4
-
-		} 
-		
-		else { // =0 => date of the month
-			cout << "ALARM 1 SET ON: " 
-			<< std::dec
-			<< std::setw(2) << std::setfill('0') << hour << ":"
-			<< std::setw(2) << std::setfill('0') << min << ":"
-			<< std::setw(2) << std::setfill('0') << sec << " on the " 
-			<< std::setw(2) << std::setfill('0') << day_date << "th" << endl;
-
-			writeRegister(alarm1SecAddress, sec); // A1M1
-			writeRegister(alarm1MinAddress, min); // A1M2
-			writeRegister(alarm1HourAddress, hour);   // A1M3
-			writeRegister(alarm1DateAddress, (0b01000000 | day_date)); // A1M4
-		}
-	else if (mask == 1111){
-
-	}
-
-
-		cout << "--------------------------------------------------------" << endl;
-
-	}*/	
-
 	    // Set Alarm 1
     void setAlarm1(bool dy_dt, unsigned char day_date, unsigned char hour, unsigned char minute, unsigned char second, unsigned char mask) {
-        
+        cout <<"ALARM 1 SET ON: "
+		<< std::dec
+		<< std::setw(2) << std::setfill('0') << (int)hour << ":"
+		<< std::setw(2) << std::setfill('0') << (int)minute << ":"
+		<< std::setw(2) << std::setfill('0') << (int)second << " on ";
+
 		if (mask == 0b0000) { //Alarm when date, hours, minutes, and seconds match
-			if (dy_dt) { // =1 => day of the week
+			if (dy_dt) { // =1 => day of the week		
+				switch (day_date) {
+					case 1:
+						cout << "Sunday" << endl;
+						break;
+					case 2:
+						cout << "Monday" << endl;
+						break;
+					case 3:
+						cout << "Tuesday" << endl;
+						break;
+					case 4:
+						cout << "Wednesday" << endl;
+						break;
+					case 5:
+						cout << "Thursday" << endl;
+						break;
+					case 6:
+						cout << "Friday" << endl;
+						break;
+					case 7:
+						cout << "Saturday" << endl;
+						break;
+					default:
+						cout << "Invalid day" << endl;
+						break;
+				}
 				day_date = day_date | 0b01000000; // Set the DY/DT bit by OR-ing with 0b10000000 (bit 6)
 			}
 			else { // =0 => date of the month
+				cout << "the" << std::setw(2) << std::setfill('0') << (int)day_date << "th" << endl;
 				day_date = day_date | 0b00000000; // Set the DY/DT bit by OR-ing with 0b00000000 (bit 6)
 			}
 		}
+
 		if (mask == 0b1000) { // Alarm when hours, minutes, and seconds match
     		day_date |= 0b10000000; // Set the A1M4 bit by OR-ing with 0b10000000 (bit 7)
+			cout << "ALARM MODE: Hours, minutes, and seconds matching" << endl;
 		}
 
 		if (mask == 0b1100) { // Alarm when minutes and seconds match
 			day_date |= 0b10000000; // Set the A1M4 bit by OR-ing with 0b10000000 (bit 7)
 			hour |= 0b10000000; // Set the A1M3 bit by OR-ing with 0b10000000 (bit 7)
+			cout << "ALARM MODE: Minutes and seconds matching" << endl;
 		}
 
 		if (mask == 0b1110) { // Alarm when seconds match
 			day_date |= 0b10000000; // Set the A1M4 bit by OR-ing with 0b10000000 (bit 7)
 			hour |= 0b10000000; // Set the A1M3 bit by OR-ing with 0b10000000 (bit 7)
 			minute |= 0b10000000; // Set the A1M2 bit by OR-ing with 0b10000000 (bit 7)
+			cout << "ALARM MODE: Seconds matching" << endl;
 		}
 
 		if (mask == 0b1111) { // Alarm every second
@@ -312,55 +296,142 @@ class RTC : public I2CDevice {
 			hour |= 0b10000000; // Set the A1M3 bit by OR-ing with 0b10000000 (bit 7)
 			minute |= 0b10000000; // Set the A1M2 bit by OR-ing with 0b10000000 (bit 7)
 			second |= 0b10000000; // Set the A1M1 bit by OR-ing with 0b10000000 (bit 7)
+			cout << "ALARM MODE: Every second" << endl;
 		}
 
-		this->writeRegister(alarm1SecAddress,  ((second / 10 * 16) + (second % 10)) ); // A1M1
-		this->writeRegister(alarm1MinAddress, ((minute / 10 * 16) + (minute % 10)) ); // A1M2
-		this->writeRegister(alarm1HourAddress, ((hour / 10 * 16) + (hour % 10)) );   // A1M3
-		this->writeRegister(alarm1DateAddress, ((day_date / 10 * 16) + (day_date % 10)) ); // A1M4
+		this->writeRegister(alarm1SecAddress,  convertToBCD(second) ); // A1M1
+		this->writeRegister(alarm1MinAddress, convertToBCD(minute) ); // A1M2
+		this->writeRegister(alarm1HourAddress, convertToBCD(hour) );   // A1M3
+		this->writeRegister(alarm1DateAddress, convertToBCD(day_date) ); // A1M4
+		cout << "--------------------------------------------------------" << endl;
     }
 
 	void isAlarm1Triggered () {
-		unsigned char status = readRegister(statusAddress);
 		while (true) 
 		{		
+			unsigned char status = readRegister(statusAddress);
 			if (status & 0b00000001) {
-				cout << "ALARM 1 TRIGGERED" << endl;
+				cout << "STATUS: ALARM 1 TRIGGERED" << endl;
 				enableInterruptAlarm1();
+
+				cout << "UNTRIGGERING ALARM 1 IN 5 SECONDS..." << endl;
+				std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+				writeRegister(statusAddress, (status & 0b11111110) ); // untriggering the alarm 1 (A1F bit is cleared by writing 0 to it)
+				writeRegister(controlAddress, (readRegister(controlAddress)) & 0b11111110); //(A1IE bit is cleared by writing 0 to it)
+				cout << "ALARM 1 UNTRIGGERED" << endl;
+
 				break;
 			} 
 			else {
-				cout << "ALARM 1 NOT TRIGGERED" << endl;
+				cout << "STATUS: ALARM 1 NOT TRIGGERED" << endl;
+				std::this_thread::sleep_for(std::chrono::milliseconds(300));
 			}
 		}
 	}
 
 	void enableInterruptAlarm1() {
 		unsigned int control = readRegister(controlAddress);
-		control |= 0b00000101; // set the INTCN and A1IE bits
-		writeRegister(controlAddress, ((control / 10 * 16) + (control % 10)) );
+		control |= 0b00000001; // set the INTCN and A1IE bits
+		writeRegister(controlAddress, control);
+	}
+
+	void setAlarm2(bool dy_dt, unsigned char day_date, unsigned char hour, unsigned char minute, unsigned char mask) {
+
+        cout <<"ALARM 2 SET ON: "
+		<< std::dec
+		<< std::setw(2) << std::setfill('0') << (int)hour << ":"
+		<< std::setw(2) << std::setfill('0') << (int)minute << " on ";
+
+		if (mask == 0b000) { // Alarm when date, hours and minutes match
+			if (dy_dt) { // =1 => day of the week
+				switch (day_date) {
+					case 1:
+						cout << "Sunday" << endl;
+						break;
+					case 2:
+						cout << "Monday" << endl;
+						break;
+					case 3:
+						cout << "Tuesday" << endl;
+						break;
+					case 4:
+						cout << "Wednesday" << endl;
+						break;
+					case 5:
+						cout << "Thursday" << endl;
+						break;
+					case 6:
+						cout << "Friday" << endl;
+						break;
+					case 7:
+						cout << "Saturday" << endl;
+						break;
+					default:
+						cout << "Invalid day" << endl;
+						break;
+				}
+				day_date = day_date | 0b01000000; // Set the DY/DT bit by OR-ing with 0b10000000 (bit 6)
+			}
+			else { // =0 => date of the month
+				cout << "the" << std::setw(2) << std::setfill('0') << (int)day_date << "th" << endl;
+				day_date = day_date | 0b00000000; // Set the DY/DT bit by OR-ing with 0b00000000 (bit 6)
+			}
+
+		}
+		
+		if (mask == 0b100) { // Alarm when hours and minutes match
+			day_date |= 0b10000000; // Set the A2M4 bit by OR-ing with 0b10000000 (bit 7)
+			cout << "ALARM MODE: Hours and minutes matching" << endl;
+		}
+
+		if (mask == 0b110) { // Alarm when minutes match
+			day_date |= 0b10000000; // Set the A2M4 bit by OR-ing with 0b10000000 (bit 7)
+			hour |= 0b10000000; // Set the A2M3 bit by OR-ing with 0b10000000 (bit 7)
+			cout << "ALARM MODE: Minutes matching" << endl;
+		}
+
+		if (mask == 0b111) { // Alarm once per minute
+			day_date |= 0b10000000; // Set the A2M4 bit by OR-ing with 0b10000000 (bit 7)
+			hour |= 0b10000000; // Set the A2M3 bit by OR-ing with 0b10000000 (bit 7)
+			minute |= 0b10000000; // Set the A2M2 bit by OR-ing with 0b10000000 (bit 7)
+			cout << "ALARM MODE: Seconds matching" << endl;
+		}
+
+		this->writeRegister(alarm2MinAddress, convertToBCD(minute) ); // A2M2
+		this->writeRegister(alarm2HourAddress, convertToBCD(hour) );   // A2M3
+		this->writeRegister(alarm2DateAddress, convertToBCD(day_date) ); // A2M4
+		cout << "--------------------------------------------------------" << endl;
+
 	}
 
 
 	void isAlarm2Triggered () {
-		unsigned char status = readRegister(statusAddress);
 		while (true) 
 		{		
+			unsigned char status = readRegister(statusAddress);
 			if (status & 0b00000010) {
-				cout << "ALARM 2 TRIGGERED" << endl;
+				cout << "STATUS: ALARM 2 TRIGGERED" << endl;
 				enableInterruptAlarm2();
+
+				cout << "UNTRIGGERING ALARM 2 IN 5 SECONDS..." << endl;
+				std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+				writeRegister(statusAddress, (status & 0b11111101) ); // untriggering the alarm 2 // untriggering the alarm 2 (A2F bit is cleared by writing 0 to it)
+				writeRegister(controlAddress, (readRegister(controlAddress)) & 0b11111101); //(A2IE bit is cleared by writing 0 to it)
+				cout << "ALARM 2 UNTRIGGERED" << endl;
+			
 				break;
 			} 
 			else {
-				cout << "ALARM 2 NOT TRIGGERED" << endl;
+				cout << "STATUS: ALARM 2 NOT TRIGGERED" << endl;
+				std::this_thread::sleep_for(std::chrono::milliseconds(300));
 			}
 		}
 	}
 
 	void enableInterruptAlarm2() {
 		unsigned int control = readRegister(controlAddress);
-		control |= 0b00000110; // set the INTCN and A2IE bits
-		writeRegister(controlAddress, ((control / 10 * 16) + (control % 10)) );
+		control |= 0b00000010; // set the INTCN and A2IE bits
+		writeRegister(controlAddress, control );
 	}
 
 };
@@ -393,13 +464,21 @@ int main() {
 	//mask = 0b1000 => hours, minutes, and seconds must match
 	//mask = 0b1100 => minutes and seconds must match
 	//mask = 0b1110 => seconds must match
-	RTC.setAlarm1(0, 02, 18, 20, 59, 0b1100); // param1 = 0 => date of the month / = 1 => day of the week
+	//RTC.setAlarm1(0, 02, 16, 30, 59, 0b1110); // param1 = 0 => date of the month / = 1 => day of the week
 	// (dy_dt, day_date, hour, minute, second, mask)
 
+	//RTC.isAlarm1Triggered();
 
 
-	RTC.isAlarm1Triggered();
-	
+	//mask = 0b000 => all components must match
+	//mask = 0b111 => every minute
+	//mask = 0b100 => hours and minutes must match
+	//mask = 0b110 => minutes must match
+	RTC.setAlarm2(0, 30, 16, 29, 0b111); // param1 = 0 => date of the month / = 1 => day of the week
+	// (dy_dt, min, hour, day_date, mask)
+
+	RTC.isAlarm2Triggered();
+
 
 
     RTC.close();
