@@ -74,25 +74,25 @@ class RTC : public I2CDevice {
 		cout << "Current Date (DD-MM-YY): ";
 				switch (dayName) {
 					case 1:
-						cout << "Monday ";
+						cout << "Sunday ";
 						break;
 					case 2:
-						cout << "Tuesday ";
+						cout << "Monday ";
 						break;
 					case 3:
-						cout << "Wednesday ";
+						cout << "Tuesday ";
 						break;
 					case 4:
-						cout << "Thursday ";
+						cout << "Wednesday ";
 						break;
 					case 5:
-						cout << "Friday ";
+						cout << "Thursday ";
 						break;
 					case 6:
-						cout << "Saturday ";
+						cout << "Friday ";
 						break;
 					case 7:
-						cout << "Sunday ";
+						cout << "Saturday ";
 						break;
 					default:
 						cout << "Invalid day ";
@@ -130,7 +130,7 @@ class RTC : public I2CDevice {
 
 	}
 
-	void setTimeDate(unsigned int sec, unsigned int min, unsigned int hour, unsigned int date, unsigned int month, unsigned int year) {
+	void setTimeDate(bool dy_dt, unsigned int sec, unsigned int min, unsigned int hour, unsigned int date, unsigned int month, unsigned int year) {
 
 		cout << "TIME SET TO: " 
 		<< std::dec
@@ -150,9 +150,15 @@ class RTC : public I2CDevice {
 		writeRegister(minAddress, convertToBCD(min));
 		writeRegister(hourAddress, convertToBCD(hour));
 		//Date
-		writeRegister(dateAddress, convertToBCD(date));
+
 		writeRegister(monthAddress, convertToBCD(month));
 		writeRegister(yearAddress, convertToBCD(year));
+		if (dy_dt) { // =1 => day of the week	
+			writeRegister(dayNameAddress, convertToBCD(date));
+		}
+		else  { // =0 => date of the month
+			writeRegister(dateAddress, convertToBCD(date));
+		}
 
 
 	}
@@ -167,7 +173,7 @@ class RTC : public I2CDevice {
 		unsigned int min = timeinfo->tm_min;
 		unsigned int h = timeinfo->tm_hour;
 
-		unsigned int dayName = timeinfo->tm_wday; // day name
+		unsigned int dayName = timeinfo->tm_wday+1; // day name (0-6 with 0 = sunday, 1 = monday, ... 6 = saturday)
 		unsigned int d = (timeinfo->tm_mday); // date
 		unsigned int month = (timeinfo->tm_mon + 1); // starts from 0 (0-11)
 		unsigned int y = (timeinfo->tm_year - 100); //starts from 1900 so 2024 - 1900 = 124 => we remove 100
@@ -186,29 +192,28 @@ class RTC : public I2CDevice {
 		writeRegister(monthAddress, convertToBCD(month));
 		writeRegister(yearAddress, convertToBCD(y));
 
-
 		cout << "DATE SET TO: ";
-		switch (timeinfo->tm_wday) {
+		switch (dayName) {
 			case 1:
-				cout << "Monday ";
+				cout << "Sunday ";
 				break;
 			case 2:
-				cout << "Tuesday ";
+				cout << "Monday ";
 				break;
 			case 3:
-				cout << "Wednesday ";
+				cout << "Tuesday ";
 				break;
 			case 4:
-				cout << "Thursday ";
+				cout << "Wednesday ";
 				break;
 			case 5:
-				cout << "Friday ";
+				cout << "Thursday ";
 				break;
 			case 6:
-				cout << "Saturday ";
+				cout << "Friday ";
 				break;
 			case 7:
-				cout << "Sunday ";
+				cout << "Saturday ";
 				break;
 			default:
 				cout << "Invalid day ";
@@ -299,7 +304,7 @@ class RTC : public I2CDevice {
 			cout << "ALARM MODE: Every second" << endl;
 		}
 
-		this->writeRegister(alarm1SecAddress,  convertToBCD(second) ); // A1M1
+		this->writeRegister(alarm1SecAddress, convertToBCD(second) ); // A1M1
 		this->writeRegister(alarm1MinAddress, convertToBCD(minute) ); // A1M2
 		this->writeRegister(alarm1HourAddress, convertToBCD(hour) );   // A1M3
 		this->writeRegister(alarm1DateAddress, convertToBCD(day_date) ); // A1M4
@@ -319,19 +324,19 @@ class RTC : public I2CDevice {
 				writeRegister(statusAddress, (status & 0b11111110) ); // untriggering the alarm 1 (A1F bit is cleared by writing 0 to it)
 				writeRegister(controlAddress, (readRegister(controlAddress)) & 0b11111110); //(A1IE bit is cleared by writing 0 to it)
 				cout << "ALARM 1 UNTRIGGERED" << endl;
-
+				cout << "--------------------------------------------------------" << endl;
 				break;
 			} 
 			else {
 				cout << "STATUS: ALARM 1 NOT TRIGGERED" << endl;
-				std::this_thread::sleep_for(std::chrono::milliseconds(300));
+				std::this_thread::sleep_for(std::chrono::milliseconds(500));
 			}
 		}
 	}
 
 	void enableInterruptAlarm1() {
 		unsigned int control = readRegister(controlAddress);
-		control |= 0b00000001; // set the INTCN and A1IE bits
+		control |= 0b00000001; // set the A1IE bits
 		writeRegister(controlAddress, control);
 	}
 
@@ -374,7 +379,7 @@ class RTC : public I2CDevice {
 			}
 			else { // =0 => date of the month
 				cout << "the" << std::setw(2) << std::setfill('0') << (int)day_date << "th" << endl;
-				day_date = day_date | 0b00000000; // Set the DY/DT bit by OR-ing with 0b00000000 (bit 6)
+				day_date = day_date & 0b10111111; // Set the DY/DT bit by bitwise AND with 0b00000000 (bit 6)
 			}
 
 		}
@@ -394,7 +399,7 @@ class RTC : public I2CDevice {
 			day_date |= 0b10000000; // Set the A2M4 bit by OR-ing with 0b10000000 (bit 7)
 			hour |= 0b10000000; // Set the A2M3 bit by OR-ing with 0b10000000 (bit 7)
 			minute |= 0b10000000; // Set the A2M2 bit by OR-ing with 0b10000000 (bit 7)
-			cout << "ALARM MODE: Seconds matching" << endl;
+			cout << "ALARM MODE: once per minute" << endl;
 		}
 
 		this->writeRegister(alarm2MinAddress, convertToBCD(minute) ); // A2M2
@@ -418,19 +423,19 @@ class RTC : public I2CDevice {
 				writeRegister(statusAddress, (status & 0b11111101) ); // untriggering the alarm 2 // untriggering the alarm 2 (A2F bit is cleared by writing 0 to it)
 				writeRegister(controlAddress, (readRegister(controlAddress)) & 0b11111101); //(A2IE bit is cleared by writing 0 to it)
 				cout << "ALARM 2 UNTRIGGERED" << endl;
-			
+				cout << "--------------------------------------------------------" << endl;
 				break;
 			} 
 			else {
 				cout << "STATUS: ALARM 2 NOT TRIGGERED" << endl;
-				std::this_thread::sleep_for(std::chrono::milliseconds(300));
+				std::this_thread::sleep_for(std::chrono::milliseconds(500));
 			}
 		}
 	}
 
 	void enableInterruptAlarm2() {
 		unsigned int control = readRegister(controlAddress);
-		control |= 0b00000010; // set the INTCN and A2IE bits
+		control |= 0b00000010; // set the A2IE bits
 		writeRegister(controlAddress, control );
 	}
 
@@ -445,7 +450,7 @@ int main() {
 
 
 	cout << "--------------------------------------------------------" << endl;
-	cout << " TESTING FUNCTIONS" << endl;
+	cout << " RTC DS3231" << endl;
 	cout << "--------------------------------------------------------" << endl;
 
 	//RTC.setCurrentTimeDate();
@@ -457,17 +462,17 @@ int main() {
 
 	RTC.displayTimeDate();
 
-	//RTC.displayTemperature();
+	RTC.displayTemperature();
 
 	//mask = 0b0000 => all components must match 
 	//mask = 0b1111 => every second
 	//mask = 0b1000 => hours, minutes, and seconds must match
 	//mask = 0b1100 => minutes and seconds must match
 	//mask = 0b1110 => seconds must match
-	//RTC.setAlarm1(0, 02, 16, 30, 59, 0b1110); // param1 = 0 => date of the month / = 1 => day of the week
+	RTC.setAlarm1(0, 02, 16, 30, 59, 0b1110); // param1 = 0 => date of the month / = 1 => day of the week
 	// (dy_dt, day_date, hour, minute, second, mask)
 
-	//RTC.isAlarm1Triggered();
+	RTC.isAlarm1Triggered();
 
 
 	//mask = 0b000 => all components must match
@@ -479,7 +484,7 @@ int main() {
 
 	RTC.isAlarm2Triggered();
 
-
+	
 
     RTC.close();
 
